@@ -19,7 +19,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
     else console.log("✅ تم الاتصال بقاعدة البيانات المحلية (SQLite) بنجاح.");
 });
 
-// تهيئة Firebase Admin تلقائياً إذا توفرت بيانات الاعتماد في متغيرات البيئة
 let firestoreDb = null;
 try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -30,15 +29,12 @@ try {
         });
         firestoreDb = admin.firestore();
         console.log("🔥 تم تفعيل المزامنة السحابية مع Firebase Firestore بنجاح.");
-    } else {
-        console.log("ℹ️ يعمل النظام بقاعدة البيانات المدمجة السريعة (SQLite Cache) وجاهز للربط مع Firebase.");
     }
 } catch (fbErr) {
-    console.error("⚠️ تعذر تهيئة Firebase، سيتم الاعتماد على قاعدة البيانات المحلية:", fbErr.message);
+    console.error("⚠️ تعذر تهيئة Firebase:", fbErr.message);
 }
 
 db.serialize(() => {
-    // جدول الوكلاء الثانويين
     db.run(`CREATE TABLE IF NOT EXISTS sub_agents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
@@ -47,7 +43,6 @@ db.serialize(() => {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
-    // جدول ربط المشتركين بالوكلاء
     db.run(`CREATE TABLE IF NOT EXISTS assigned_subscribers (
         subscriber_id TEXT PRIMARY KEY,
         sub_agent_id INTEGER,
@@ -55,7 +50,6 @@ db.serialize(() => {
         FOREIGN KEY(sub_agent_id) REFERENCES sub_agents(id) ON DELETE CASCADE
     )`);
 
-    // جدول تخزين المشتركين المؤقت والذكي (بدون تكرار + بصمة التغيير)
     db.run(`CREATE TABLE IF NOT EXISTS cached_subscribers (
         username TEXT PRIMARY KEY,
         subscriber_id TEXT,
@@ -77,7 +71,6 @@ db.serialize(() => {
     db.run(`CREATE INDEX IF NOT EXISTS idx_sub_status ON cached_subscribers(is_active, has_active_session)`);
 });
 
-// دوال مساعدة لـ SQLite
 const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
 });
@@ -104,7 +97,7 @@ function cleanUser(u) {
 
 function computeSubscriberHash(sub) {
     const relevant = {
-        c: extractVal(sub.customer) || extractVal(sub.subscriber),
+        c: extractVal(sub.customer) || extractVal(sub.subscriber) || extractVal(sub.self),
         s: extractVal(sub.status),
         a: Boolean(sub.isActive),
         o: Boolean(sub.hasActiveSession),
@@ -116,7 +109,7 @@ function computeSubscriberHash(sub) {
 }
 
 // ==========================================
-// 2. مسار فحص النبض ومنع السكون (Keep-Alive على Render)
+// 2. مسارات فحص النبض ومنع السكون
 // ==========================================
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'awake', timestamp: new Date().toISOString(), uptime: process.uptime() });
@@ -153,17 +146,13 @@ app.post('/api/ftth/login', async (req, res) => {
 });
 
 // ==========================================
-// 4. جلب المشتركين المخزنين محلياً بسرعة البرق (بدون ضرب الـ API)
+// 4. جلب المشتركين المخزنين محلياً بسرعة
 // ==========================================
 app.get('/api/ftth/subscriptions/cached', async (req, res) => {
     try {
         const rows = await dbAll(`SELECT raw_json, updated_at FROM cached_subscribers ORDER BY customer_name ASC`);
         const items = rows.map(r => {
-            try {
-                return JSON.parse(r.raw_json);
-            } catch {
-                return null;
-            }
+            try { return JSON.parse(r.raw_json); } catch { return null; }
         }).filter(Boolean);
 
         const lastSyncRow = await dbGet(`SELECT MAX(updated_at) as lastSync FROM cached_subscribers`);
@@ -180,25 +169,25 @@ app.get('/api/ftth/subscriptions/cached', async (req, res) => {
 });
 
 // ==========================================
-// 5. دالة سحب جميع المشتركين وتجاوز حد الـ 500 مشترك
+// 5. سحب جميع العملاء/المشتركين عبر /api/customers مع totalCount والصفحات
 // ==========================================
 async function fetchAllSubscriptionsFromApi(token) {
     const uniqueMap = new Map();
-    const pageSize = 500;
+    const pageSize = 200;
     let pageNumber = 1;
     let keepFetching = true;
-    const maxPages = 40; // يدعم حتى 20,000 مشترك بأمان
+    const maxPages = 50;
 
     while (keepFetching && pageNumber <= maxPages) {
-        const url = `https://admin.ftth.iq/api/subscriptions?hierarchyLevel=0&pageSize=${pageSize}&pageNumber=${pageNumber}`;
+        const url = `https://admin.ftth.iq/api/customers?pageSize=${pageSize}&pageNumber=${pageNumber}&sortCriteria.property=self.displayValue&sortCriteria.direction=asc`;
         const response = await axios.get(url, {
             headers: { 'Authorization': token, 'Accept': 'application/json' },
             timeout: 25000
         });
 
-        const data = response.data;
-        const batch = Array.isArray(data) ? data : (data.items || data.subscribers || data.data || []);
-        const totalCount = data.totalCount || data.total || null;
+        const data = response.data || {};
+        const batch = Array.isArray(data) ? data : (data.items || data.customers || data.data || []);
+        const totalCount = Number(data.totalCount || data.total || 0);
 
         if (!batch || batch.length === 0) {
             keepFetching = false;
@@ -206,50 +195,39 @@ async function fetchAllSubscriptionsFromApi(token) {
         }
 
         let newlyAddedInBatch = 0;
-        for (const sub of batch) {
-            const key = cleanUser(sub.username) || String(sub.id || '');
-            if (key && !uniqueMap.has(key)) {
-                uniqueMap.set(key, sub);
+        for (const cust of batch) {
+            const custId = String(cust.self?.id || cust.id || '');
+            const custName = cust.self?.displayValue || cust.primaryContact?.self?.displayValue || extractVal(cust.customer) || 'غير محدد';
+            const key = custId || cleanUser(custName);
+            if (!key) continue;
+
+            const normalized = {
+                ...cust,
+                id: custId || key,
+                customerId: custId || key,
+                username: cust.username || custId || key,
+                customer: {
+                    id: custId || key,
+                    displayValue: custName
+                },
+                status: cust.status || (cust.isActive ? 'Active' : 'Active'),
+                isActive: cust.isActive !== undefined ? Boolean(cust.isActive) : true,
+                hasActiveSession: Boolean(cust.hasActiveSession),
+                package: cust.package || cust.customerType?.displayValue || 'Residential',
+                startedAt: cust.createdAt || cust.startedAt || ''
+            };
+
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, normalized);
                 newlyAddedInBatch++;
             }
         }
 
-        // إذا أرجع السيرفر نفس البيانات (تجاهل pageNumber) أو وصلنا للعدد الكلي، نتوقف
-        if (newlyAddedInBatch === 0 || batch.length < pageSize || (totalCount && uniqueMap.size >= totalCount)) {
+        if (newlyAddedInBatch === 0 || batch.length < pageSize || (totalCount > 0 && uniqueMap.size >= totalCount)) {
             keepFetching = false;
         } else {
             pageNumber++;
-            await new Promise(r => setTimeout(r, 150)); // مهلة خفيفة لتجنب الحظر
-        }
-    }
-
-    // خطة احتياطية: إذا كان الـ API يتجاهل pageNumber ويقفل عند 500 سجل بالترتيب الافتراضي،
-    // نسحب بالترتيب التصاعدي والتنازلي والنشط والمنتهي لجمع أكبر عدد ممكن بدون تكرار
-    if (uniqueMap.size === 500) {
-        const fallbackQueries = [
-            'https://admin.ftth.iq/api/subscriptions?hierarchyLevel=0&pageSize=1000&sortCriteria.property=username&sortCriteria.direction=desc',
-            'https://admin.ftth.iq/api/subscriptions?hierarchyLevel=0&pageSize=1000&sortCriteria.property=createdAt&sortCriteria.direction=asc',
-            'https://admin.ftth.iq/api/subscriptions?hierarchyLevel=0&pageSize=1000&sortCriteria.property=createdAt&sortCriteria.direction=desc',
-            'https://admin.ftth.iq/api/subscriptions?hierarchyLevel=1&pageSize=1000'
-        ];
-
-        for (const fbUrl of fallbackQueries) {
-            try {
-                const fbRes = await axios.get(fbUrl, {
-                    headers: { 'Authorization': token, 'Accept': 'application/json' },
-                    timeout: 20000
-                });
-                const fbData = fbRes.data;
-                const fbBatch = Array.isArray(fbData) ? fbData : (fbData.items || fbData.subscribers || fbData.data || []);
-                for (const sub of fbBatch) {
-                    const key = cleanUser(sub.username) || String(sub.id || '');
-                    if (key && !uniqueMap.has(key)) {
-                        uniqueMap.set(key, sub);
-                    }
-                }
-            } catch (_) {
-                // تجاهل أي استعلام احتياطي غير مدعوم
-            }
+            await new Promise(r => setTimeout(r, 120));
         }
     }
 
@@ -257,7 +235,7 @@ async function fetchAllSubscriptionsFromApi(token) {
 }
 
 // ==========================================
-// 6. المزامنة الذكية (Delta Sync: تحديث المتغير وإضافة الجديد فقط بدون تكرار)
+// 6. المزامنة الذكية (Delta Sync بدون تكرار)
 // ==========================================
 let isSyncingNow = false;
 
@@ -304,7 +282,7 @@ app.post('/api/ftth/sync', async (req, res) => {
         `);
 
         for (const sub of remoteSubs) {
-            const username = cleanUser(sub.username) || cleanUser(sub.id);
+            const username = cleanUser(sub.username || sub.id);
             if (!username) continue;
 
             const newHash = computeSubscriberHash(sub);
@@ -312,7 +290,7 @@ app.post('/api/ftth/sync', async (req, res) => {
 
             if (oldHash === newHash) {
                 unchangedCount++;
-                continue; // لم يتغير شيء، لا داعي للكتابة في القاعدة
+                continue;
             }
 
             if (!oldHash) addedCount++;
@@ -323,7 +301,7 @@ app.post('/api/ftth/sync', async (req, res) => {
             const isOnline = sub.hasActiveSession ? 1 : 0;
             const customerName = extractVal(sub.customer) || extractVal(sub.subscriber) || 'غير محدد';
             const customerId = String(sub.customerId || sub.accountId || (typeof sub.customer === 'object' ? sub.customer.id : '') || sub.id || '');
-            const planType = extractVal(sub.package) || extractVal(sub.self) || 'SELF';
+            const planType = extractVal(sub.package) || extractVal(sub.self) || 'Residential';
             const expires = sub.expires || sub.expirationDate || '';
             const startedAt = sub.startedAt || sub.createdAt || '';
             const rxPower = sub.rxPower !== undefined && sub.rxPower !== null ? Number(sub.rxPower) : null;
@@ -352,7 +330,6 @@ app.post('/api/ftth/sync', async (req, res) => {
         await new Promise((resolve, reject) => stmt.finalize(err => err ? reject(err) : resolve()));
         await dbRun('COMMIT');
 
-        // مزامنة التغييرات فقط إلى Firebase Firestore في الخلفية (بدون تكرار عبر doc(username))
         if (firestoreDb && changedDocsForFirebase.length > 0) {
             (async () => {
                 try {
@@ -387,14 +364,17 @@ app.post('/api/ftth/sync', async (req, res) => {
         });
     } catch (error) {
         try { await dbRun('ROLLBACK'); } catch (_) {}
-        console.error("خطأ أثناء المزامنة:", error.response?.data || error.message);
-        res.status(error.response?.status || 500).json({ error: "فشل الاتصال بسيرفر الشركة للمزامنة" });
+        const apiErr = error.response?.data || error.message;
+        console.error("خطأ أثناء المزامنة:", apiErr);
+        res.status(error.response?.status || 500).json({
+            error: "فشل الاتصال بسيرفر الشركة للمزامنة",
+            details: typeof apiErr === 'string' ? apiErr : JSON.stringify(apiErr)
+        });
     } finally {
         isSyncingNow = false;
     }
 });
 
-// الإبقاء على المسار القديم للتوافق
 app.get('/api/ftth/subscriptions', async (req, res) => {
     const token = req.headers.authorization;
     if (!token) return res.status(401).json({ error: "غير مصرح" });
@@ -407,7 +387,6 @@ app.get('/api/ftth/subscriptions', async (req, res) => {
     }
 });
 
-// تفاصيل الـ ONT حسب الـ Username
 app.get('/api/ftth/ont', async (req, res) => {
     const token = req.headers.authorization;
     const username = req.query.username;
@@ -424,7 +403,6 @@ app.get('/api/ftth/ont', async (req, res) => {
     }
 });
 
-// ملف العميل الشامل واشتراكاته بالاعتماد على customerId
 app.get('/api/ftth/customer/:id', async (req, res) => {
     const token = req.headers.authorization;
     const customerId = req.params.id;
@@ -445,7 +423,6 @@ app.get('/api/ftth/customer/:id', async (req, res) => {
     }
 });
 
-// محفظة الشريك
 app.get('/api/ftth/wallet/:partnerId', async (req, res) => {
     const token = req.headers.authorization;
     const partnerId = req.params.partnerId;
@@ -462,7 +439,6 @@ app.get('/api/ftth/wallet/:partnerId', async (req, res) => {
     }
 });
 
-// الجلسات
 app.get('/api/ftth/sessions', async (req, res) => {
     const token = req.headers.authorization;
     if (!token) return res.status(401).json({ error: "غير مصرح" });
@@ -478,7 +454,6 @@ app.get('/api/ftth/sessions', async (req, res) => {
     }
 });
 
-// التذاكر
 app.get('/api/ftth/tickets', async (req, res) => {
     const token = req.headers.authorization;
     if (!token) return res.status(401).json({ error: "غير مصرح" });
@@ -494,7 +469,6 @@ app.get('/api/ftth/tickets', async (req, res) => {
     }
 });
 
-// المهام والطلبات
 app.get('/api/ftth/requests', async (req, res) => {
     const token = req.headers.authorization;
     if (!token) return res.status(401).json({ error: "غير مصرح" });
@@ -558,7 +532,6 @@ app.post('/api/subagent/login', (req, res) => {
     });
 });
 
-// إرجاع بيانات المشتركين الكاملة المخزنة للوكيل الثانوي (وليس فقط المعرف)
 app.get('/api/subagent/my-subscribers/:subAgentId', async (req, res) => {
     const { subAgentId } = req.params;
     try {
@@ -575,7 +548,7 @@ app.get('/api/subagent/my-subscribers/:subAgentId', async (req, res) => {
 });
 
 // ==========================================
-// 8. آلية منع السكون والخمول على Render (Anti-Sleep Keep-Alive)
+// 8. آلية منع السكون والخمول
 // ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -584,7 +557,6 @@ app.listen(PORT, () => {
     const externalUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_URL;
     if (externalUrl) {
         console.log(`🛡️ تم تفعيل مانع الخمول الذاتي على الرابط: ${externalUrl}/health`);
-        // إرسال نبضة كل 10 دقائق (Render يدخل في السكون بعد 15 دقيقة من الخمول)
         setInterval(async () => {
             try {
                 await axios.get(`${externalUrl}/health`, { timeout: 10000 });
@@ -594,3 +566,6 @@ app.listen(PORT, () => {
         }, 10 * 60 * 1000);
     }
 });
+```[cite: 13]
+
+هل تحتاج كود `public/app.js` أو `public/index.html` أو `public/subagent.html` أيضاً بشكل نصي قابل للنسخ هنا؟
