@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مركز وار لخدمات الانترنت - نظام الإدارة</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        cardDark: '#1e293b',
+                        lightBg: '#f8fafc',
+                        cardLight: '#ffffff'
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <style> 
+        body { font-family: 'Tajawal', sans-serif; } 
+        @keyframes fiber-glow {
+            0%, 100% { transform: scale(0.95); opacity: 0.7; box-shadow: 0 0 15px rgba(99, 102, 241, 0.5); }
+            50% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 35px rgba(99, 102, 241, 0.9); }
+        }
+        .w-logo-animation { animation: fiber-glow 2s infinite ease-in-out; }
+    </style>
+    <script>
+        if (localStorage.getItem('ftth_token')) {
+            document.write('<style>#login-screen { display: none !important; }</style>');
+        }
+    </script>
+</head>
+<body class="bg-lightBg text-slate-800 dark:bg-darkBg dark:text-slate-100 min-h-screen pb-24 transition-colors duration-200 text-sm">
+
+    <!-- شاشة التحميل السريعة -->
+    <div id="global-loader" class="fixed inset-0 bg-slate-950 z-50 flex flex-col items-center justify-center space-y-6 p-4 transition-opacity duration-200">
+        <div class="relative flex items-center justify-center">
+            <div class="w-24 h-24 bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-400 rounded-3xl flex items-center justify-center shadow-2xl w-logo-animation">
+                <span class="text-white text-4xl font-black font-sans tracking-widest drop-shadow-md">W</span>
+            </div>
+        </div>
+        <div class="text-center space-y-2">
+            <p class="text-xl font-black text-white tracking-wide">مركز وار لخدمات الانترنت</p>
+            <p class="text-sm font-bold text-indigo-400">للاتصال والاستفسار: <span class="text-amber-400 font-mono text-base">6145</span></p>
+            <p class="text-xs text-slate-400 animate-pulse pt-1">جاري فتح المنظومة...</p>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2 pointer-events-none"></div>
+
+    <!-- شاشة تسجيل الدخول -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-cardLight dark:bg-cardDark border border-slate-200 dark:border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-md space-y-6">
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 bg-indigo-600 rounded-2xl mx-auto flex items-center justify-center shadow-lg">
+                    <span class="text-white text-3xl font-black">W</span>
+                </div>
+                <h2 class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">مركز وار لخدمات الانترنت</h2>
+                <p class="text-sm text-slate-500 dark:text-slate-400">سجّل دخولك للوصول إلى منظومة المشتركين</p>
+            </div>
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold mb-1">اسم المستخدم / البريد</label>
+                    <input type="text" id="ftth-email" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-base focus:outline-none focus:border-indigo-500" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">كلمة المرور</label>
+                    <input type="password" id="ftth-password" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-base focus:outline-none focus:border-indigo-500" required>
+                </div>
+                <button type="submit" id="login-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3.5 rounded-xl font-bold text-base shadow-lg transition">دخول النظام</button>
+            </form>
+            <p class="text-center text-xs text-slate-400 font-bold">مبيعات وخدمات المركز: <span class="text-amber-400 font-mono">6145</span></p>
+        </div>
+    </div>
+
+    <!-- لوحة التحكم الرئيسية -->
+    <div id="dashboard-screen" class="hidden min-h-screen flex flex-col">
+        <header class="bg-cardLight dark:bg-cardDark border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 p-4 flex flex-wrap justify-between items-center gap-2 shadow-md">
+            <div class="flex items-center gap-2.5 flex-wrap">
+                <div class="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg">W</div>
+                <div>
+                    <h1 class="text-base font-extrabold" id="header-title">مركز وار لخدمات الانترنت</h1>
+                    <p id="last-sync-text" class="text-[10px] text-slate-400 font-bold">جاهز</p>
+                </div>
+                <span id="wallet-badge" class="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-xl text-xs font-bold">الرصيد: ...</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="sync-now-btn" onclick="syncSubscribersSmart(false)" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow transition">
+                    <span id="sync-icon" class="inline-block">🔄</span>
+                    <span id="sync-btn-text">مزامنة الآن</span>
+                </button>
+                <button onclick="toggleTheme()" class="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    <span id="theme-icon">🌙</span> <span id="theme-text" class="hidden sm:inline">الداكن</span>
+                </button>
+                <button onclick="logout()" class="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-3 py-1.5 rounded-xl text-xs font-bold">خروج</button>
+            </div>
+        </header>
+
+        <!-- الإحصائيات -->
+        <div class="p-4 grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div onclick="filterOnlineStatus('all')" class="bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm flex flex-col items-center justify-center text-center cursor-pointer hover:border-indigo-500 transition">
+                <div class="w-16 h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-600 flex items-center justify-center mb-2 shadow-inner">
+                    <span id="stat-total" class="text-lg font-black text-indigo-500">0</span>
+                </div>
+                <p class="text-xs font-extrabold text-slate-600 dark:text-slate-300">إجمالي المشتركين</p>
+            </div>
+            <div class="bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm flex flex-col items-center justify-center text-center">
+                <div class="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 flex items-center justify-center mb-2 shadow-inner">
+                    <span id="stat-active" class="text-lg font-black text-emerald-500">0</span>
+                </div>
+                <p class="text-xs font-extrabold text-slate-600 dark:text-slate-300">الاشتراكات الفعالة</p>
+            </div>
+            <div onclick="filterOnlineStatus('online')" class="bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm flex flex-col items-center justify-center text-center cursor-pointer hover:border-blue-500 transition">
+                <div class="w-16 h-16 rounded-full border-4 border-blue-500/20 border-t-blue-500 flex items-center justify-center mb-2 shadow-inner">
+                    <span id="stat-online" class="text-lg font-black text-blue-500">0</span>
+                </div>
+                <p class="text-xs font-extrabold text-slate-600 dark:text-slate-300">المتصلين الآن</p>
+            </div>
+            <div onclick="filterOnlineStatus('offline')" class="bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm flex flex-col items-center justify-center text-center cursor-pointer hover:border-slate-400 transition">
+                <div class="w-16 h-16 rounded-full border-4 border-slate-400/20 border-t-slate-400 flex items-center justify-center mb-2 shadow-inner">
+                    <span id="stat-offline" class="text-lg font-black text-slate-400">0</span>
+                </div>
+                <p class="text-xs font-extrabold text-slate-600 dark:text-slate-300">غير المتصلين</p>
+            </div>
+            <div onclick="filterExpiringSoon()" class="bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-amber-500/30 shadow-sm flex flex-col items-center justify-center text-center cursor-pointer hover:border-amber-500 transition col-span-2 md:col-span-1">
+                <div class="w-16 h-16 rounded-full border-4 border-amber-500/20 border-t-amber-500 flex items-center justify-center mb-2 shadow-inner">
+                    <span id="stat-expiring" class="text-lg font-black text-amber-500">0</span>
+                </div>
+                <p class="text-xs font-extrabold text-amber-500">ينتهي خلال 7 أيام</p>
+            </div>
+        </div>
+
+        <main class="p-4 flex-1">
+            <section id="tab-subscribers" class="tab-content space-y-4">
+                <div class="bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                            <h2 class="text-base font-extrabold whitespace-nowrap">قائمة المشتركين</h2>
+                            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1">
+                                <span class="text-xs text-slate-500 whitespace-nowrap">تاريخ التفعيل:</span>
+                                <input type="date" id="filter-activation-date" onchange="filterByActivationDate()" class="bg-transparent text-xs focus:outline-none font-bold">
+                                <button onclick="clearDateFilter()" title="إلغاء التصفية" class="text-xs text-rose-500 font-bold px-1 hover:bg-rose-500/10 rounded">✕</button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 w-full sm:w-auto">
+                            <select id="select-agent-assign" class="bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold p-2.5 rounded-xl flex-1">
+                                <option value="">اختر وكيلاً ثانويًا...</option>
+                            </select>
+                            <button onclick="assignSelected()" class="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap shadow">تحويل المحدد</button>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+                        <input type="text" id="search-input" oninput="debouncedFilterSubscribers()" placeholder="🔍 ابحث باسم المشترك أو اسم المستخدم..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-sm font-semibold focus:outline-none focus:border-indigo-500">
+                        <span id="subscribers-count-badge" class="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap self-end sm:self-auto">العدد الكلي: 0</span>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/70">
+                        <table class="w-full text-right text-sm">
+                            <thead class="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold">
+                                <tr>
+                                    <th class="p-3.5"><input type="checkbox" id="select-all"></th>
+                                    <th class="p-3.5 cursor-pointer hover:text-indigo-500 select-none" onclick="sortSubscribersByName()">المشترك / اسم المستخدم ↕</th>
+                                    <th class="p-3.5 cursor-pointer hover:text-indigo-500 select-none" onclick="sortSubscribersByPower()">البور (Rx Power) ↕</th>
+                                    <th class="p-3.5">حالة الاشتراك</th>
+                                    <th class="p-3.5 cursor-pointer hover:text-indigo-500 select-none" onclick="sortSubscribersByOnlineStatus()">الاتصال ↕</th>
+                                    <th class="p-3.5 cursor-pointer hover:text-indigo-500 select-none" onclick="sortSubscribersByPlanType()">نوع الإشتراك ↕</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subscribers-table-body" class="divide-y divide-slate-200 dark:divide-slate-700/60 font-medium"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- أزرار التنقل السريع بين الصفحات لتخفيف الحمل -->
+                    <div id="pagination-controls" class="hidden flex justify-between items-center pt-2 text-xs">
+                        <button onclick="changePage(-1)" class="bg-slate-200 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-xl font-bold transition">→ السابق</button>
+                        <span id="page-info-text" class="font-extrabold text-slate-500 dark:text-slate-400">صفحة 1</span>
+                        <button onclick="changePage(1)" class="bg-slate-200 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white px-4 py-2 rounded-xl font-bold transition">التالي ←</button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-agents" class="tab-content hidden space-y-4">
+                <div class="bg-cardLight dark:bg-cardDark p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                    <h2 class="text-base font-extrabold border-b border-slate-200 dark:border-slate-700 pb-2">إضافة وكيل ثانوي جديد</h2>
+                    <form id="add-agent-form" class="space-y-3">
+                        <input type="text" id="agent-name" placeholder="الاسم الكامل" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-sm font-semibold" required>
+                        <input type="text" id="agent-username" placeholder="اسم المستخدم" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-sm font-semibold" required>
+                        <input type="password" id="agent-password" placeholder="كلمة المرور" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-sm font-semibold" required>
+                        <button type="submit" class="w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-extrabold">إنشاء الوكيل</button>
+                    </form>
+                    <h3 class="text-xs font-bold pt-2">قائمة الوكلاء الحاليين</h3>
+                    <div id="agents-list" class="space-y-2 max-h-60 overflow-y-auto"></div>
+                </div>
+            </section>
+
+            <section id="tab-tickets" class="tab-content hidden space-y-4">
+                <div class="bg-cardLight dark:bg-cardDark p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2">
+                        <h2 class="text-base font-extrabold">تذاكر الدعم الفني</h2>
+                        <button onclick="loadTickets()" class="bg-indigo-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold">تحديث التذاكر</button>
+                    </div>
+                    <div id="tickets-list" class="space-y-3"></div>
+                </div>
+            </section>
+
+            <section id="tab-tasks" class="tab-content hidden space-y-4">
+                <div class="bg-cardLight dark:bg-cardDark p-5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2">
+                        <h2 class="text-base font-extrabold">مهام التنصيب والطلبات</h2>
+                        <button onclick="loadRequestsTasks()" class="bg-indigo-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold">تحديث المهام</button>
+                    </div>
+                    <div id="tasks-list" class="space-y-3"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- صفحة تفاصيل المشترك المستقلة -->
+        <div id="subscriber-detail-page" class="hidden min-h-screen bg-lightBg dark:bg-darkBg fixed inset-0 z-50 p-4 flex flex-col space-y-4 overflow-y-auto">
+            <div class="flex justify-between items-center bg-cardLight dark:bg-cardDark p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md">
+                <div class="flex items-center gap-3">
+                    <button onclick="closeSubscriberDetail()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-extrabold shadow-md transition">← العودة للرئيسية</button>
+                    <div>
+                        <h3 id="detail-sub-name" class="text-base font-black">تفاصيل المشترك</h3>
+                        <p id="detail-sub-user" class="text-xs text-indigo-500 font-mono font-bold">username</p>
+                    </div>
+                </div>
+            </div>
+            <div id="detail-content-card" class="space-y-4 max-w-3xl mx-auto w-full pb-16"></div>
+        </div>
+
+        <nav class="fixed bottom-0 left-0 right-0 bg-cardLight dark:bg-cardDark border-t border-slate-200 dark:border-slate-700 flex justify-around p-3 z-30 shadow-lg">
+            <button onclick="switchTab('subscribers', 'المشتركين')" class="nav-btn text-indigo-500 flex flex-col items-center gap-1 text-xs font-extrabold" id="btn-subscribers">
+                <span>المشتركين</span>
+            </button>
+            <button onclick="switchTab('agents', 'وكلاء النظام')" class="nav-btn text-slate-400 flex flex-col items-center gap-1 text-xs font-semibold" id="btn-agents">
+                <span>الوكلاء</span>
+            </button>
+            <button onclick="switchTab('tickets', 'التذاكر الفنية')" class="nav-btn text-slate-400 flex flex-col items-center gap-1 text-xs font-semibold" id="btn-tickets">
+                <span>التذاكر</span>
+            </button>
+            <button onclick="switchTab('tasks', 'المهام')" class="nav-btn text-slate-400 flex flex-col items-center gap-1 text-xs font-semibold" id="btn-tasks">
+                <span>المهام</span>
+            </button>
+        </nav>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

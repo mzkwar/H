@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم الوكيل الثانوي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Tajawal', sans-serif; } </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <!-- تسجيل دخول الوكيل الثانوي -->
+    <div id="sub-login" class="bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-xl w-full max-w-sm">
+        <h2 class="text-xl font-bold text-center text-white mb-4">دخول الوكيل الثانوي</h2>
+        <form id="sub-login-form" class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">اسم المستخدم</label>
+                <input type="text" id="sub-user" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500" required>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-1">كلمة المرور</label>
+                <input type="password" id="sub-pass" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500" required>
+            </div>
+            <button class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl font-bold text-xs transition">تسجيل الدخول</button>
+        </form>
+    </div>
+
+    <!-- لوحة المشتركين المخصصين -->
+    <div id="sub-dashboard" class="hidden w-full max-w-4xl bg-slate-800 border border-slate-700 p-6 rounded-2xl shadow-xl space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+            <div>
+                <h1 id="welcome-msg" class="text-base font-bold text-white">لوحة المشتركين الخاصة بي</h1>
+                <p class="text-xs text-slate-400">قائمة المشتركين المحولين إليك مع حالتهم المحدثة</p>
+            </div>
+            <button onclick="location.reload()" class="bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold">خروج</button>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-700">
+            <table class="w-full text-right text-xs">
+                <thead>
+                    <tr class="bg-slate-900 text-slate-400 border-b border-slate-700">
+                        <th class="p-3">#</th>
+                        <th class="p-3">المشترك / Username</th>
+                        <th class="p-3">البور</th>
+                        <th class="p-3">الاشتراك</th>
+                        <th class="p-3">الاتصال</th>
+                    </tr>
+                </thead>
+                <tbody id="my-subscribers-list" class="divide-y divide-slate-700/50"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('sub-login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const res = await fetch('/api/subagent/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: document.getElementById('sub-user').value,
+                    password: document.getElementById('sub-pass').value
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                document.getElementById('sub-login').classList.add('hidden');
+                document.getElementById('sub-dashboard').classList.remove('hidden');
+                document.getElementById('welcome-msg').innerText = `أهلاً بك: ${data.name}`;
+                loadMySubs(data.id);
+            } else {
+                alert(data.error);
+            }
+        });
+
+        async function loadMySubs(agentId) {
+            const res = await fetch(`/api/subagent/my-subscribers/${agentId}`);
+            const rows = await res.json();
+            const tbody = document.getElementById('my-subscribers-list');
+            
+            if (!rows || rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">لا يوجد مشتركين محولين إليك حالياً</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = rows.map((sub, index) => `
+                <tr class="hover:bg-slate-700/30">
+                    <td class="p-3">${index + 1}</td>
+                    <td class="p-3">
+                        <span class="font-bold text-emerald-400 block">${sub.customer_name || sub.subscriber_id}</span>
+                        <span class="text-[11px] text-slate-400 font-mono">${sub.subscriber_id}</span>
+                    </td>
+                    <td class="p-3 font-mono">${sub.rx_power !== null && sub.rx_power !== undefined ? sub.rx_power + ' dBm' : '--'}</td>
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 rounded ${sub.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}">
+                            ${sub.is_active ? 'فعال' : 'منتهي'}
+                        </span>
+                    </td>
+                    <td class="p-3">
+                        <span class="px-2 py-0.5 rounded ${sub.has_active_session ? 'bg-blue-500/10 text-blue-400' : 'bg-slate-700 text-slate-400'}">
+                            ${sub.has_active_session ? 'متصل' : 'غير متصل'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
