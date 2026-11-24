@@ -1,0 +1,16 @@
+{
+  "name": "ftth-multi-agent-system",
+  "version": "2.1.0",
+  "description": "نظام سحب بيانات المشتركين وتوزيعهم على وكلاء ثانويين عبر admin.ftth.iq مع مزامنة ذكية ومنع الخمول",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "firebase-admin": "^12.1.0",
+    "sqlite3": "^5.1.6"
+  }
+}
