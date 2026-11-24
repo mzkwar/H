@@ -143,8 +143,7 @@ app.post('/api/ftth/login', async (req, res) => {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Accept': 'application/json'
-            },
-            timeout: 15000
+            }
         });
         res.json(response.data);
     } catch (error) {
@@ -186,23 +185,41 @@ app.get('/api/ftth/subscriptions/cached', async (req, res) => {
 });
 
 // ==========================================
-// 5. سحب جميع العملاء/المشتركين عبر /api/customers مع totalCount والصفحات
+// 5. سحب جميع العملاء عبر /api/customers بالترويسات الأصلية والصفحات
 // ==========================================
+async function fetchCustomersPage(token, pageNumber, pageSize, withSort = true) {
+    const sortQuery = withSort
+        ? '&sortCriteria.property=self.displayValue&sortCriteria.direction=asc'
+        : '';
+    const url = `https://admin.ftth.iq/api/customers?pageSize=${pageSize}&pageNumber=${pageNumber}${sortQuery}`;
+    const response = await axios.get(url, {
+        headers: { Authorization: token, Accept: 'application/json' }
+    });
+    return response.data || {};
+}
+
 async function fetchAllSubscriptionsFromApi(token) {
     const uniqueMap = new Map();
-    const pageSize = 200;
+    const pageSize = 100;
     let pageNumber = 1;
     let keepFetching = true;
-    const maxPages = 50;
+    const maxPages = 100;
+    let useSort = true;
 
     while (keepFetching && pageNumber <= maxPages) {
-        const url = `https://admin.ftth.iq/api/customers?pageSize=${pageSize}&pageNumber=${pageNumber}&sortCriteria.property=self.displayValue&sortCriteria.direction=asc`;
-        const response = await axios.get(url, {
-            headers: { Authorization: token, Accept: 'application/json' },
-            timeout: 25000
-        });
+        let data;
+        try {
+            data = await fetchCustomersPage(token, pageNumber, pageSize, useSort);
+        } catch (err) {
+            // إذا فشل الطلب الأول بسبب الفرز، نعيد المحاولة بدون sortCriteria
+            if (pageNumber === 1 && useSort) {
+                useSort = false;
+                data = await fetchCustomersPage(token, pageNumber, pageSize, false);
+            } else {
+                throw err;
+            }
+        }
 
-        const data = response.data || {};
         const batch = Array.isArray(data) ? data : (data.items || data.customers || data.data || []);
         const totalCount = Number(data.totalCount || data.total || 0);
 
@@ -248,7 +265,7 @@ async function fetchAllSubscriptionsFromApi(token) {
             keepFetching = false;
         } else {
             pageNumber++;
-            await new Promise((r) => setTimeout(r, 120));
+            await new Promise((r) => setTimeout(r, 100));
         }
     }
 
@@ -427,8 +444,7 @@ app.get('/api/ftth/ont', async (req, res) => {
 
     try {
         const response = await axios.get(`https://admin.ftth.iq/api/subscriptions/device/ont?username=${username}`, {
-            headers: { Authorization: token, Accept: 'application/json' },
-            timeout: 15000
+            headers: { Authorization: token, Accept: 'application/json' }
         });
         res.json(response.data);
     } catch (error) {
@@ -445,14 +461,12 @@ app.get('/api/ftth/customer/:id', async (req, res) => {
         const [custRes, subsRes] = await Promise.all([
             axios
                 .get(`https://admin.ftth.iq/api/customers/${customerId}`, {
-                    headers: { Authorization: token, Accept: 'application/json' },
-                    timeout: 15000
+                    headers: { Authorization: token, Accept: 'application/json' }
                 })
                 .catch(() => ({ data: {} })),
             axios
                 .get(`https://admin.ftth.iq/api/customers/subscriptions?customerId=${customerId}`, {
-                    headers: { Authorization: token, Accept: 'application/json' },
-                    timeout: 15000
+                    headers: { Authorization: token, Accept: 'application/json' }
                 })
                 .catch(() => ({ data: {} }))
         ]);
@@ -473,8 +487,7 @@ app.get('/api/ftth/wallet/:partnerId', async (req, res) => {
 
     try {
         const response = await axios.get(`https://admin.ftth.iq/api/partners/${partnerId}/wallets/balance`, {
-            headers: { Authorization: token, Accept: 'application/json' },
-            timeout: 15000
+            headers: { Authorization: token, Accept: 'application/json' }
         });
         res.json(response.data);
     } catch (error) {
@@ -490,8 +503,7 @@ app.get('/api/ftth/sessions', async (req, res) => {
         const response = await axios.get(
             'https://admin.ftth.iq/api/sessions?pageSize=50&pageNumber=1&sortCriteria.property=username&sortCriteria.direction=asc&status=1&hierarchyLevel=1',
             {
-                headers: { Authorization: token, Accept: 'application/json' },
-                timeout: 15000
+                headers: { Authorization: token, Accept: 'application/json' }
             }
         );
         res.json(response.data);
@@ -508,8 +520,7 @@ app.get('/api/ftth/tickets', async (req, res) => {
         const response = await axios.get(
             'https://admin.ftth.iq/api/support/tickets?pageSize=12&pageNumber=1&sortCriteria.property=createdAt&sortCriteria.direction=desc&hierarchyLevel=1&additionalFilter=ForMe',
             {
-                headers: { Authorization: token, Accept: 'application/json' },
-                timeout: 15000
+                headers: { Authorization: token, Accept: 'application/json' }
             }
         );
         res.json(response.data);
@@ -526,8 +537,7 @@ app.get('/api/ftth/requests', async (req, res) => {
         const response = await axios.get(
             'https://admin.ftth.iq/api/requests?pageSize=10&pageNumber=1&sortCriteria.property=CreatedAt&sortCriteria.direction=desc&typeIds=28be9a02-1365-400b-9db4-003829eb962c&status=Open&additionalFilters=MyRequests',
             {
-                headers: { Authorization: token, Accept: 'application/json' },
-                timeout: 15000
+                headers: { Authorization: token, Accept: 'application/json' }
             }
         );
         res.json(response.data);
